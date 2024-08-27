@@ -13,7 +13,7 @@
 
 //Constants
 #define ADDRESS "127.0.0.1"
-#define MESSAGE_LENGHT 256
+#define MESSAGE_LENGTH 256
 
 using namespace std;
 
@@ -39,17 +39,28 @@ int main(){
     string message_to_send;
     char buffer[256];
     
-    do{
+    do {
         //Message to send
-        cout << "Pepito: "; cin.getline(buffer,MESSAGE_LENGHT);
-        buffer[MESSAGE_LENGHT-1]='\0';
-        write(SocketFD,buffer,MESSAGE_LENGHT);
+        cout << "Pepito: ";
+        cin.getline(buffer, MESSAGE_LENGTH);
 
-        //Message received
-        read(SocketFD,buffer,MESSAGE_LENGHT);
-        printf("Josesito: [%s]\n", buffer);
+        buffer[MESSAGE_LENGTH - 1] = '\0';
 
-    }while(1);
+        
 
+        // Enviar el mensaje
+        write(SocketFD, buffer, strlen(buffer) + 1);
+
+        if(strcmp(buffer,"chau")==0){
+            cout << "XD\n";
+            break;
+        }
+
+        //Message read
+        read(SocketFD, buffer, MESSAGE_LENGTH);
+        printf("Josesito: %s\n", buffer);
+
+    } while (strcmp(buffer, "chau") != 0);
+    printf("Ended connection\n");
     return 0;
 }

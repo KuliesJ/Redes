@@ -61,15 +61,19 @@ int main(){
         do{
             //Message received
             read(ConnectFD,buffer,MESSAGE_LENGHT);
-            printf("Pepito: [%s]\n", buffer);
+            printf("Pepito: %s\n", buffer);
+
+            if(strcmp(buffer,"chau")==0){
+                break;
+            }
 
             //Message to send
             cout << "Josesito: "; cin.getline(buffer,MESSAGE_LENGHT);
             buffer[MESSAGE_LENGHT-1] = '\0';
             write(ConnectFD,buffer,MESSAGE_LENGHT);
 
-        }while(1);
-        cout << "eNDED CONNECTION WITH SOMEONE"     ;
+        }while(strcmp(buffer,"chau")!=0);
+        printf("Ended a connection\n");
     }
     // Close connection
     shutdown(ConnectFD, SHUT_RDWR);
