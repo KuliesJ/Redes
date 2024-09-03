@@ -19,6 +19,20 @@
 
 using namespace std;
 
+void reading_thread(int socket) {
+    char buffer[MESSAGE_LENGTH] = {};
+    int bytes_read;
+    while (true) {
+        bytes_read = read(socket, buffer, MESSAGE_LENGTH - 1); 
+        if (bytes_read <= 0) {
+            break;
+        }
+        buffer[bytes_read] = '\0';
+        printf("Received: %s\n", buffer);
+    }
+    close(socket);
+}
+
 //Main function
 int main(){
 
@@ -29,7 +43,7 @@ int main(){
     memset(&stSockAddr, 0, sizeof(struct sockaddr_in));
 
     stSockAddr.sin_family = AF_INET;
-    stSockAddr.sin_port = htons(1100);
+    stSockAddr.sin_port = htons(45002);
 
     // Convert IPv4 and IPv6 addresses from text to binary form
     inet_pton(AF_INET, ADDRESS, &stSockAddr.sin_addr);
@@ -42,8 +56,8 @@ int main(){
     char buffer[256];
     
     do {
+        thread(reading_thread, SocketFD).detach();
         //Message to send
-        cout << "Pepito: ";
         cin.getline(buffer, MESSAGE_LENGTH);
 
         buffer[MESSAGE_LENGTH - 1] = '\0';
@@ -54,14 +68,10 @@ int main(){
         write(SocketFD, buffer, strlen(buffer) + 1);
 
         if(strcmp(buffer,"chau")==0){
-            cout << "XD\n";
             break;
         }
 
-        //Message read
-        read(SocketFD, buffer, MESSAGE_LENGTH);
-        printf("Josesito: %s\n", buffer);
-
+        
     } while (strcmp(buffer, "chau") != 0);
     printf("Ended connection\n");
     return 0;
