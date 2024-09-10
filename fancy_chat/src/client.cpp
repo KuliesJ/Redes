@@ -25,12 +25,12 @@ string int_to_padded_string(int num) {
     return ss.str();
 }
 
-// Function to process the received message
+//received message
 void process_message(const string& message) {
     cout << "Message: " << message << endl;
 }
 
-// Function to process the list of users
+// list of users
 void process_list_of_users(const string& list) {
     if (list.length() > 2 && list.front() == '{' && list.back() == '}') {
         string users = list.substr(1, list.length() - 2);
@@ -40,20 +40,19 @@ void process_list_of_users(const string& list) {
     }
 }
 
-// Function to process error messages
+// error messages
 void process_error(const string& error) {
     cout << "Error: " << error << endl;
 }
 
-// Function to process acknowledgement
+// session
 void process_acknowledgement() {
     cout << "Nickname accepted. You can now send messages and perform other actions." << endl;
 }
 
-// Global variable to track registration status
+// registration status
 bool is_registered = false;
 
-// Function to handle reading from the socket
 void reading_thread(int socket) {
     char buffer[MESSAGE_LENGTH] = {};
     while (true) {
@@ -70,33 +69,31 @@ void reading_thread(int socket) {
         }
 
         if (type == 'A') {
-            // Handle 'A' type message
             process_acknowledgement();
             is_registered = true;
             continue;
         }
 
-        // Read the length field (5 bytes) for other types
         bytes_read = read(socket, buffer, 5);
         if (bytes_read != 5) {
             cerr << "Failed to read length field" << endl;
             break;
         }
-        buffer[5] = '\0'; // Null-terminate for safe conversion
+        buffer[5] = '\0'; // Null-terminate
         int length = atoi(buffer);
         if (length <= 0 || length > MESSAGE_LENGTH - 1) {
             cerr << "Invalid length: " << length << endl;
             break;
         }
 
-        // Read the actual message
+        // Read
         bytes_read = read(socket, buffer, length);
         if (bytes_read != length) {
             cerr << "Failed to read complete message" << endl;
             //break;
         }
 
-        buffer[length] = '\0'; // Null-terminate the message
+        buffer[length] = '\0'; // Null-terminate
         string received_message(buffer);
 
         switch (type) {
@@ -110,7 +107,7 @@ void reading_thread(int socket) {
                 process_error(received_message);
                 break;
             case 'B':
-                process_message(received_message); // Use process_message for broadcast
+                process_message(received_message);
                 break;
         }
     }
@@ -148,7 +145,7 @@ void manage_server_request(int socket, string& sender_name) {
             cout << "Insert destination nickname: ";
             cin >> dest_nickname;
             cout << "Insert message: ";
-            cin.ignore();  // Ignore leftover newline from previous input
+            cin.ignore();
             getline(cin, message);
 
             // Ensure destination nickname and message fit within MESSAGE_LENGTH - 10 (for length prefixes)

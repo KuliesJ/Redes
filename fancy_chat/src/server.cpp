@@ -11,9 +11,9 @@
 #include <thread>
 #include <map>
 #include <mutex>
-#include <iomanip>  // Para std::setw y std::setfill
-#include <sstream>  // Para std::stringstream
-
+#include <iomanip>
+#include <sstream>
+#include <chrono>
 using namespace std;
 
 #define PORT 45001
@@ -26,7 +26,6 @@ int SocketFD = -1;
 // Mutex for thread-safe access to sockets map
 mutex mtx;
 
-// Function to handle SIGINT signal
 void handle_sigint(int sig) {
     if (SocketFD != -1) {
         close(SocketFD);
@@ -43,7 +42,7 @@ void handle_nickname_request(int socket) {
         close(socket);
         return;
     }
-    nickname_size_str[5] = '\0'; // Ensure null-termination
+    nickname_size_str[5] = '\0';
 
     int nickname_size = atoi(nickname_size_str);
     if (nickname_size <= 0 || nickname_size >= MESSAGE_LENGTH) {
@@ -68,23 +67,36 @@ void handle_nickname_request(int socket) {
     if (sockets.find(nickname) != sockets.end()) {
     const string error_message = "User already exists";
 
-    // Convert error message length to a 5-character string
+    // 5-character string
     stringstream ss;
     ss << setw(5) << setfill('0') << error_message.size();
     string length_str = ss.str();
 
-    // Form the full error message
+    // full error message
     string full_message = "E" + length_str + error_message;
 
-    // Send the error message
+    // Send
     write(socket, full_message.c_str(), full_message.size());
     }
 
      else {
         sockets[nickname] = socket;
         cout << socket << " logged in as " << nickname << endl;
-        write(socket, "A", 1); // Acknowledgment for successful login
+        write(socket, "A", 1); // successful login
     }
+}
+
+
+// Utility function to get the current timestamp in the format YYYYMMDDHHMM
+std::string get_current_timestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto now_c = std::chrono::system_clock::to_time_t(now);
+    std::tm* now_tm = std::localtime(&now_c);
+
+    std::ostringstream timestamp_ss;
+    timestamp_ss << std::put_time(now_tm, "%Y%m%d%H%M"); // Format: YearMonthDayHourMinute
+
+    return timestamp_ss.str();
 }
 
 void handle_message_request(int socket) {
@@ -95,15 +107,15 @@ void handle_message_request(int socket) {
         close(socket);
         return;
     }
-    dest_nickname_size_str[5] = '\0'; // Ensure null-termination
+    dest_nickname_size_str[5] = '\0'; // null-termination
 
     int dest_nickname_size = atoi(dest_nickname_size_str);
     if (dest_nickname_size <= 0 || dest_nickname_size >= MESSAGE_LENGTH) {
         const string error_message = "Invalid destination nickname size";
-        write(socket, "E", 1); // Error code
+        write(socket, "E", 1); // Error
         write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
         write(socket, error_message.c_str(), error_message.size());
-        return; // Do not close the socket
+        return;
     }
 
     char dest_nickname[MESSAGE_LENGTH] = {};
@@ -112,7 +124,7 @@ void handle_message_request(int socket) {
         close(socket);
         return;
     }
-    dest_nickname[dest_nickname_size] = '\0'; // Null-terminate the destination nickname
+    dest_nickname[dest_nickname_size] = '\0'; // Null-terminate
 
     // Read message size
     char message_size_str[6] = {}; // 5 characters + null terminator
@@ -121,15 +133,15 @@ void handle_message_request(int socket) {
         close(socket);
         return;
     }
-    message_size_str[5] = '\0'; // Ensure null-termination
+    message_size_str[5] = '\0'; // null-termination
 
     int message_size = atoi(message_size_str);
     if (message_size <= 0 || message_size >= MESSAGE_LENGTH) {
         const string error_message = "Invalid message size";
-        write(socket, "E", 1); // Error code
+        write(socket, "E", 1); // Error
         write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
         write(socket, error_message.c_str(), error_message.size());
-        return; // Do not close the socket
+        return;
     }
 
     char message[MESSAGE_LENGTH] = {};
@@ -138,14 +150,17 @@ void handle_message_request(int socket) {
         close(socket);
         return;
     }
-    message[message_size] = '\0'; // Null-terminate the message
+    message[message_size] = '\0'; // Null-terminate
 
-    // Prepare message in format: "M" + 5-byte length + message
-    stringstream ss;
-    ss << setw(5) << setfill('0') << message_size;
-    string length_str = ss.str();
-    
-    string full_message = "M" + length_str + string(message, message_size);
+    // Get current timestamp
+    std::string timestamp = get_current_timestamp();
+
+    // Prepare message in format: "M" + 5-byte length + message + timestamp
+    std::stringstream ss;
+    ss << std::setw(5) << std::setfill('0') << message_size + 12;
+    std::string length_str = ss.str();
+
+    std::string full_message = "M" + length_str + std::string(message, message_size) + timestamp;
 
     lock_guard<mutex> guard(mtx);
     auto it = sockets.find(dest_nickname);
@@ -153,45 +168,48 @@ void handle_message_request(int socket) {
         int dest_socket = it->second;
         write(dest_socket, full_message.c_str(), full_message.size());
     } else {
-    const string error_message = "User not found";
+        const string error_message = "User not found";
 
-    // Convert error message length to a 5-character string
-    stringstream ss;
-    ss << setw(5) << setfill('0') << error_message.size();
-    string length_str = ss.str();
+        // Get current timestamp
+        timestamp = get_current_timestamp();
 
-    // Form the full error message
-    string full_message = "E" + length_str + error_message;
+        // Convert error message length to a 5-character string
+        std::stringstream length_ss;
+        length_ss << std::setw(5) << std::setfill('0') << error_message.size();
+        std::string length_str = length_ss.str();
 
-    // Send the error message
-    write(socket, full_message.c_str(), full_message.size());
-}
+        // Form the full error message with timestamp
+        std::string full_message = "E" + length_str + error_message + timestamp;
+
+        // Send the full error message
+        write(socket, full_message.c_str(), full_message.size());
+    }
 }
 
 
 void handle_list_request(int socket) {
     lock_guard<mutex> guard(mtx);
 
-    // Prepare the list of connected users
+    // Prepare the list
     string user_list = "{";
     for (const auto& entry : sockets) {
         user_list += entry.first + ", ";
     }
     if (user_list.length() > 1) {
-        user_list.pop_back(); // Remove the last space
-        user_list.pop_back(); // Remove the last comma
+        user_list.pop_back();
+        user_list.pop_back();
     }
     user_list += "}";
 
-    // Format the length as a 5-byte string
+    // 5-byte string
     stringstream ss;
     ss << setw(5) << setfill('0') << user_list.size();
     string length_str = ss.str();
 
     // Send the list to the requesting client
-    write(socket, "L", 1); // Code for list of users
-    write(socket, length_str.c_str(), length_str.size()); // Send length (5 bytes)
-    write(socket, user_list.c_str(), user_list.size()); // Send the user list
+    write(socket, "L", 1);
+    write(socket, length_str.c_str(), length_str.size());
+    write(socket, user_list.c_str(), user_list.size());
 }
 
 void handle_broadcast_request(int socket) {
@@ -202,12 +220,12 @@ void handle_broadcast_request(int socket) {
         close(socket);
         return;
     }
-    broadcast_message_size_str[5] = '\0'; // Ensure null-termination
+    broadcast_message_size_str[5] = '\0';
 
     int broadcast_message_size = atoi(broadcast_message_size_str);
     if (broadcast_message_size <= 0 || broadcast_message_size >= MESSAGE_LENGTH) {
         const string error_message = "Invalid broadcast message size";
-        write(socket, "E", 1); // Error code
+        write(socket, "E", 1); // Error
         write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
         write(socket, error_message.c_str(), error_message.size());
         close(socket);
@@ -220,9 +238,9 @@ void handle_broadcast_request(int socket) {
         close(socket);
         return;
     }
-    broadcast_message[broadcast_message_size] = '\0'; // Null-terminate the message
+    broadcast_message[broadcast_message_size] = '\0';
 
-    // Prepare broadcast message in format: "B" + 5-byte length + broadcast message
+    // "B" + 5-byte length + broadcast message
     stringstream ss;
     ss << setw(5) << setfill('0') << broadcast_message_size;
     string length_str = ss.str();
@@ -232,7 +250,7 @@ void handle_broadcast_request(int socket) {
     lock_guard<mutex> guard(mtx);
     for (const auto& entry : sockets) {
         int user_socket = entry.second;
-        if (user_socket != socket) { // Avoid sending the message back to the sender
+        if (user_socket != socket) {
             write(user_socket, full_message.c_str(), full_message.size());
         }
     }
@@ -287,7 +305,7 @@ void manage_requests(int socket) {
 
             case 'o':
                 handle_logout_request(socket);
-                session_available = false; // End session after logout
+                session_available = false; 
                 break;
 
             default:
