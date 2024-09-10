@@ -66,11 +66,21 @@ void handle_nickname_request(int socket) {
 
     lock_guard<mutex> guard(mtx);
     if (sockets.find(nickname) != sockets.end()) {
-        const string error_message = "User already exists";
-        write(socket, "E", 1); // Error code
-        write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
-        write(socket, error_message.c_str(), error_message.size());
-    } else {
+    const string error_message = "User already exists";
+
+    // Convert error message length to a 5-character string
+    stringstream ss;
+    ss << setw(5) << setfill('0') << error_message.size();
+    string length_str = ss.str();
+
+    // Form the full error message
+    string full_message = "E" + length_str + error_message;
+
+    // Send the error message
+    write(socket, full_message.c_str(), full_message.size());
+    }
+
+     else {
         sockets[nickname] = socket;
         cout << socket << " logged in as " << nickname << endl;
         write(socket, "A", 1); // Acknowledgment for successful login
@@ -88,6 +98,14 @@ void handle_message_request(int socket) {
     dest_nickname_size_str[5] = '\0'; // Ensure null-termination
 
     int dest_nickname_size = atoi(dest_nickname_size_str);
+    if (dest_nickname_size <= 0 || dest_nickname_size >= MESSAGE_LENGTH) {
+        const string error_message = "Invalid destination nickname size";
+        write(socket, "E", 1); // Error code
+        write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
+        write(socket, error_message.c_str(), error_message.size());
+        return; // Do not close the socket
+    }
+
     char dest_nickname[MESSAGE_LENGTH] = {};
     ssize_t dest_nickname_bytes_read = read(socket, dest_nickname, dest_nickname_size);
     if (dest_nickname_bytes_read <= 0) {
@@ -106,6 +124,14 @@ void handle_message_request(int socket) {
     message_size_str[5] = '\0'; // Ensure null-termination
 
     int message_size = atoi(message_size_str);
+    if (message_size <= 0 || message_size >= MESSAGE_LENGTH) {
+        const string error_message = "Invalid message size";
+        write(socket, "E", 1); // Error code
+        write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
+        write(socket, error_message.c_str(), error_message.size());
+        return; // Do not close the socket
+    }
+
     char message[MESSAGE_LENGTH] = {};
     ssize_t message_bytes_read = read(socket, message, message_size);
     if (message_bytes_read <= 0) {
@@ -127,11 +153,19 @@ void handle_message_request(int socket) {
         int dest_socket = it->second;
         write(dest_socket, full_message.c_str(), full_message.size());
     } else {
-        const string error_message = "User not found";
-        write(socket, "E", 1); // Error code
-        write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
-        write(socket, error_message.c_str(), error_message.size());
-    }
+    const string error_message = "User not found";
+
+    // Convert error message length to a 5-character string
+    stringstream ss;
+    ss << setw(5) << setfill('0') << error_message.size();
+    string length_str = ss.str();
+
+    // Form the full error message
+    string full_message = "E" + length_str + error_message;
+
+    // Send the error message
+    write(socket, full_message.c_str(), full_message.size());
+}
 }
 
 
@@ -143,7 +177,7 @@ void handle_list_request(int socket) {
     for (const auto& entry : sockets) {
         user_list += entry.first + ", ";
     }
-    if (!user_list.empty()) {
+    if (user_list.length() > 1) {
         user_list.pop_back(); // Remove the last space
         user_list.pop_back(); // Remove the last comma
     }
@@ -160,7 +194,6 @@ void handle_list_request(int socket) {
     write(socket, user_list.c_str(), user_list.size()); // Send the user list
 }
 
-
 void handle_broadcast_request(int socket) {
     // Read broadcast message size
     char broadcast_message_size_str[6] = {}; // 5 characters + null terminator
@@ -172,6 +205,15 @@ void handle_broadcast_request(int socket) {
     broadcast_message_size_str[5] = '\0'; // Ensure null-termination
 
     int broadcast_message_size = atoi(broadcast_message_size_str);
+    if (broadcast_message_size <= 0 || broadcast_message_size >= MESSAGE_LENGTH) {
+        const string error_message = "Invalid broadcast message size";
+        write(socket, "E", 1); // Error code
+        write(socket, to_string(error_message.size()).c_str(), to_string(error_message.size()).size());
+        write(socket, error_message.c_str(), error_message.size());
+        close(socket);
+        return;
+    }
+
     char broadcast_message[MESSAGE_LENGTH] = {};
     ssize_t broadcast_message_bytes_read = read(socket, broadcast_message, broadcast_message_size);
     if (broadcast_message_bytes_read <= 0) {
@@ -196,9 +238,7 @@ void handle_broadcast_request(int socket) {
     }
 }
 
-
 void handle_logout_request(int socket) {
-
     // Find the nickname associated with this socket
     string nickname_to_remove;
     {
@@ -218,7 +258,6 @@ void handle_logout_request(int socket) {
 
     close(socket);
 }
-
 
 void manage_requests(int socket) {
     bool session_available = true;
