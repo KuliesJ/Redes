@@ -94,18 +94,55 @@ private:
     atomic<bool> running; // Controla el estado del hilo de lectura
 
     void readFromServer() {
-        char buffer[1024];
-        while (running) {
-            ssize_t bytesRead = read(socketFD, buffer, sizeof(buffer) - 1);
-            if (bytesRead > 0) {
-                buffer[bytesRead] = '\0'; // Null-terminate the buffer
-                cout << "Server response: " << buffer << endl;
-            } else if (bytesRead <= 0) {
-                cerr << "Server disconnected or error occurred." << endl;
-                running = false; // Detener el hilo si hay un error
+    char buffer;
+    while (running) {
+        ssize_t bytesRead = read(socketFD, &buffer, 1);
+        switch (buffer) {
+        case 'T': {
+            char game[9];
+            char turn;
+            read(socketFD, game, 9);
+            read(socketFD, &turn, 1);
+            cout << turn << "'s turn" << endl;
+            cout << game << endl;
+            break;
+        }
+        case 'G': {
+            // Leer la longitud del nombre del usuario
+            char lengthBuffer[5]; // Para almacenar los 4 dígitos + 1 para el terminador
+            read(socketFD, lengthBuffer, 4);
+            lengthBuffer[4] = '\0'; // Terminar la cadena
+
+            // Convertir a número entero
+            int userLength = atoi(lengthBuffer);
+            
+            // Leer el nombre del usuario
+            char* usernameBuffer = new char[userLength + 1]; // +1 para el terminador
+            read(socketFD, usernameBuffer, userLength);
+            usernameBuffer[userLength] = '\0'; // Terminar la cadena
+
+            // Imprimir el mensaje
+            cout << "Game request from: " << usernameBuffer << endl;
+
+            delete[] usernameBuffer; // Liberar la memoria
+            break;
+        }
+        case 'W': {
+            char result;
+            read(socketFD, &result, 1); // Leer el resultado de la victoria
+            if (result == '1') {
+                cout << "You win!" << endl; // Mensaje para el ganador
+            } else if (result == '0') {
+                cout << "You lose!" << endl; // Mensaje para el perdedor
             }
+            break;
+        }
+        default:
+            break;
         }
     }
+}
+
 
     void registerUser(const string& nickname) {
         string lengthStr = to_string(nickname.size());
@@ -201,11 +238,26 @@ private:
     }
 
     void readResponse() {
-        char buffer[1024];
-        ssize_t bytesRead = read(socketFD, buffer, sizeof(buffer) - 1);
-        if (bytesRead > 0) {
-            buffer[bytesRead] = '\0'; // Null-terminate the buffer
-            cout << "Server response: " << buffer << endl;
+        char command;
+        ssize_t bytesRead = read(socketFD, &command, 1);
+        switch (command)
+        {
+        case 'T':
+            char tablero[9];
+            read(socketFD, &tablero, 9);
+            char turn;
+            read(socketFD, &turn, 1);
+            cout << turn << "'s turn" << endl;
+            for(int i=0;i<9;i++){
+                cout << tablero[i];
+                if((i+1)%3==0){
+                    cout << endl;
+                }
+            }
+            break;
+        
+        default:
+            break;
         }
     }
 };

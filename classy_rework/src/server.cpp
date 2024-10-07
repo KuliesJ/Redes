@@ -176,8 +176,13 @@ private:
             return;
         }
 
+        // Calcular la longitud del nombre del usuario
+        size_t userLength = users[clientSocket].length();
+
+        // Crear el mensaje de solicitud con la longitud formateada
+        string gameRequestMessage = "G" + std::to_string(userLength).insert(0, 4 - std::to_string(userLength).length(), '0') + users[clientSocket];
+
         // Enviar la solicitud al jugador objetivo
-        string gameRequestMessage = "G" + to_string(users[clientSocket].length()) + users[clientSocket];
         sendResponse(targetSocket, gameRequestMessage);
     }
 
@@ -220,46 +225,75 @@ private:
         playerSymbols[challengerSocket] = 'X'; // X para el primer jugador
         playerSymbols[opponentSocket] = 'O'; // O para el segundo jugador
 
-        sendResponse(challengerSocket, "Game started. Your symbol: X. Board: " + *initialBoard);
-        sendResponse(opponentSocket, "Game started. Your symbol: O. Board: " + *initialBoard);
+        sendResponse(challengerSocket, "T" + *initialBoard + 'X');
+        sendResponse(opponentSocket, "T" + *initialBoard + 'O');
     }
 
     void playTurn(int clientSocket) {
-        char positionBuffer[1];
-        ssize_t bytesRead = read(clientSocket, positionBuffer, 1);
-        if (bytesRead <= 0) {
-            sendResponse(clientSocket, "Error reading turn data.");
-            return;
-        }
+    char positionBuffer[1];
+    ssize_t bytesRead = read(clientSocket, positionBuffer, 1);
+    if (bytesRead <= 0) {
+        sendResponse(clientSocket, "Error reading turn data.");
+        return;
+    }
 
-        int position = positionBuffer[0] - '1'; // Convertir a índice
-        if (position < 0 || position >= 9) {
-            sendResponse(clientSocket, "Invalid position. Please enter a number between 1 and 9.");
-            return;
-        }
+    int position = positionBuffer[0] - '1'; // Convertir a índice
+    if (position < 0 || position >= 9) {
+        sendResponse(clientSocket, "Invalid position. Please enter a number between 1 and 9.");
+        return;
+    }
 
-        std::lock_guard<std::mutex> lock(gameMutex);
-        auto it = games.find(clientSocket);
-        if (it == games.end()) {
-            sendResponse(clientSocket, "No active game found.");
-            return;
-        }
+    std::lock_guard<std::mutex> lock(gameMutex);
+    auto it = games.find(clientSocket);
+    if (it == games.end()) {
+        sendResponse(clientSocket, "No active game found.");
+        return;
+    }
 
-        string* board = it->second; // Puntero al tablero actual
-        int opponentSocket = rival[clientSocket]; // Obtener el socket del oponente
+    string* board = it->second; // Puntero al tablero actual
+    int opponentSocket = rival[clientSocket]; // Obtener el socket del oponente
 
-        // Verificar que la posición esté vacía
-        if ((*board)[position] == '-') { // Si la posición está vacía
-            (*board)[position] = playerSymbols[clientSocket]; // Asignar símbolo del jugador
-            cout << "Updated board: " << *board << endl;
+    // Verificar que la posición esté vacía
+    if ((*board)[position] == '-') { // Si la posición está vacía
+        (*board)[position] = playerSymbols[clientSocket]; // Asignar símbolo del jugador
+        cout << "Updated board: " << *board << endl;
 
-            // Enviar el nuevo estado del juego a ambos jugadores
-            sendResponse(clientSocket, "Move made. Current board: " + *board);
-            sendResponse(opponentSocket, "T" + *board); // Enviar estado actualizado al oponente
+        // Verificar si hay un ganador
+        if (checkWinner(*board, playerSymbols[clientSocket])) {
+            sendResponse(clientSocket, "W1"); // El jugador ha ganado
+            sendResponse(opponentSocket, "W0"); // El oponente pierde
         } else {
-            sendResponse(clientSocket, "Invalid move. The position is already taken. Try again.");
+            // Enviar el nuevo estado del juego a ambos jugadores
+            sendResponse(opponentSocket, "T" + *board + string(1, playerSymbols[clientSocket])); // Agregar símbolo del jugador al mensaje
+        }
+    } else {
+        sendResponse(clientSocket, "Invalid move. The position is already taken. Try again.");
+    }
+}
+
+// Función para verificar si hay un ganador
+bool checkWinner(const string& board, char symbol) {
+    const int winningCombinations[8][3] = {
+        {0, 1, 2}, // Fila 1
+        {3, 4, 5}, // Fila 2
+        {6, 7, 8}, // Fila 3
+        {0, 3, 6}, // Columna 1
+        {1, 4, 7}, // Columna 2
+        {2, 5, 8}, // Columna 3
+        {0, 4, 8}, // Diagonal
+        {2, 4, 6}  // Diagonal
+    };
+
+    for (const auto& combination : winningCombinations) {
+        if (board[combination[0]] == symbol && 
+            board[combination[1]] == symbol && 
+            board[combination[2]] == symbol) {
+            return true;
         }
     }
+    return false;
+}
+
 };
 
 int main() {
