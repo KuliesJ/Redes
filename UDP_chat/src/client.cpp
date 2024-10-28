@@ -188,8 +188,6 @@ private:
         string message = instruction + destinataryLength + destinatary + contentLength + content;
 
         string paddedMessage = applyPadding(message);
-
-        sendMessage(paddedMessage);
         
         cout << "Padded Message: " << paddedMessage << endl;
 

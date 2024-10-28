@@ -112,56 +112,79 @@ private:
         cout << "Connected clients:\n" << clientList << endl;
     }
 
+    string applyPadding(const string& message) {
+        string paddedMessage = message;
+        int paddingLength = 1000 - (message.size() + 3); // 3 para la longitud del padding
+        if (paddingLength < 0) paddingLength = 0; // Evitar padding negativo
+        paddedMessage.append(paddingLength, '#'); // Añadir padding de '#'
+        paddedMessage += to_string(paddingLength); // Añadir la longitud del padding
+        return paddedMessage; // Retorna el mensaje con padding
+    }
+
+    void sendMessageToClients(const string& message) {
+        string paddedMessage = applyPadding(message);
+        
+        for (const auto& client : clientsByName) {
+            string nickname = client.first;
+            string ip = client.second.first;
+            int port = client.second.second;
+
+            struct sockaddr_in dest_addr;
+            dest_addr.sin_family = AF_INET;
+            dest_addr.sin_port = htons(port);
+            inet_pton(AF_INET, ip.c_str(), &dest_addr.sin_addr);
+
+            sendto(sock, paddedMessage.c_str(), paddedMessage.size(), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+        }
+    }
+
     void handleMessage(const string& message) {
-    try {
-        // Asegúrate de que el mensaje tiene la longitud suficiente
-        if (message.size() < 14) { // Mínimo esperado: 'm' + 4 + nombre + 4 + contenido
-            throw std::invalid_argument("Message too short");
+        if (message.size() < 14) {
+            return;
         }
 
-        // Obtener el nickname del remitente
-        int nicknameLength = stoi(message.substr(1, 4)); // Longitud del nickname
-        if (nicknameLength <= 0 || nicknameLength + 5 > message.size()) {
-            throw std::invalid_argument("Invalid nickname length");
-        }
-        string senderNickname = message.substr(5, nicknameLength); // Nombre del remitente
+        int nicknameLength = stoi(message.substr(1, 4));
+        string senderNickname = message.substr(5, nicknameLength);
 
-        // Obtener el contenido del mensaje
         int contentLengthIndex = 5 + nicknameLength;
-        int contentLength = stoi(message.substr(contentLengthIndex, 4)); // Longitud del contenido
-        if (contentLength <= 0 || contentLength + contentLengthIndex + 4 > message.size()) {
-            throw std::invalid_argument("Invalid content length");
-        }
-        string content = message.substr(contentLengthIndex + 4, contentLength); // Contenido del mensaje
-
-        // Imprimir para depurar
-        cout << "Nickname: " << senderNickname << " | Content: " << content << endl;
-
-        // Construir el mensaje para enviar
-        string response = "M" + string(4 - to_string(senderNickname.size()).size(), '0') + to_string(senderNickname.size()) +
-                          string(4 - to_string(content.size()).size(), '0') + to_string(content.size()) + content;
+        int contentLength = stoi(message.substr(contentLengthIndex, 4));
+        string content = message.substr(contentLengthIndex + 4, contentLength);
 
         cout << "Message from " << senderNickname << ": " << content << endl;
 
-        // Aquí puedes enviar el mensaje a otros clientes o gestionar la lógica adicional
-    } catch (const std::invalid_argument& e) {
-        cerr << "Invalid argument: " << e.what() << " | Message: " << message << endl;
-    } catch (const std::out_of_range& e) {
-        cerr << "Out of range: " << e.what() << " | Message: " << message << endl;
-    } catch (const std::exception& e) {
-        cerr << "An error occurred: " << e.what() << " | Message: " << message << endl;
-    }
-}
+        string response = "M" + string(4 - to_string(senderNickname.size()).size(), '0') + to_string(senderNickname.size()) + senderNickname +
+                          string(4 - to_string(content.size()).size(), '0') + to_string(content.size()) + content;
 
-    void handleBroadcast(const char* message) {
-        string content(message + 5, stoi(string(message + 1, 4))); // Extraer contenido
-
-        // Implementar la lógica para enviar un mensaje a todos los clientes
-        cout << "Broadcast message: " << content << endl;
+        sendMessageToClients(response);
     }
+
+    void handleBroadcast(const string& message) {
+        // Extraer la longitud del contenido del mensaje
+        int contentLength = stoi(message.substr(1, 4)); // Longitud del mensaje
+        string content = message.substr(5, contentLength); // Mensaje
+
+        // Obtener el nombre del remitente (nombre1) a partir del contexto actual (usando clientsByPort)
+        string senderNickname; // Nombre del cliente que envía el mensaje
+        int clientPort = ntohs(client_addr.sin_port); // Obtener el puerto del cliente actual
+        if (clientsByPort.find(clientPort) != clientsByPort.end()) {
+            senderNickname = clientsByPort[clientPort]; // Obtener el nombre del remitente
+        } else {
+            cout << "Sender not found in clientsByPort." << endl;
+            return; // Salir si no se encuentra el remitente
+        }
+
+        // Formatear el mensaje para enviar a todos los clientes
+        string response = "B" + string(4 - to_string(senderNickname.size()).size(), '0') + to_string(senderNickname.size()) +
+                        senderNickname +
+                        string(4 - to_string(content.size()).size(), '0') + to_string(content.size()) + content;
+
+        // Enviar el mensaje a todos los clientes
+        sendMessageToClients(response); // Asumiendo que sendMessageToClients envía el mensaje a la dirección correspondiente
+    }
+
+
 
     void handleFileTransfer(const char* message) {
-        // Aquí implementas la lógica para manejar la transferencia de archivos
         cout << "File transfer request received." << endl;
     }
 
@@ -185,7 +208,6 @@ private:
         cout << nickname << " logged out." << endl;
         clientsByName.erase(nickname);
     }
-
 };
 
 int main() {
