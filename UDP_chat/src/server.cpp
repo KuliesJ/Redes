@@ -15,6 +15,7 @@ class Server {
     map<int, string> clientsByPort;
     string gameState = "---------";
     int player1, player2;
+    bool isPlayerXTurn = true;
 public:
     Server(int port) {
         sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -47,41 +48,21 @@ private:
     void processMessage(const char* message) {
         char instruction = message[0];
         switch (instruction) {
-            case 'n':
-                handleLogin(message);
-                break;
-            case 'l':
-                listClients();
-                break;
-            case 'm':
-                handleMessage(message);
-                break;
-            case 'b':
-                handleBroadcast(message);
-                break;
-            case 'f':
-                handleFileTransfer(message);
-                break;
-            case 'i':
-                handleGameRequest(message);
-                break;
-            case 't':
-                handlePlayTurn(message);
-                break;
-            case 'j':
-                handleResponseToRequest(message);
-                break;
-            case 'o':
-                handleLogout(message);
-                break;
-            default:
-                cout << "Unknown instruction: " << instruction << endl;
+            case 'n': handleLogin(message); break;
+            case 'l': listClients(); break;
+            case 'm': handleMessage(message); break;
+            case 'b': handleBroadcast(message); break;
+            case 'f': handleFileTransfer(message); break;
+            case 'i': handleGameRequest(message); break;
+            case 't': handlePlayTurn(message); break;
+            case 'j': handleResponseToRequest(message); break;
+            case 'o': handleLogout(message); break;
+            default: cout << "Unknown instruction: " << instruction << endl;
         }
     }
 
     void handleLogin(const char* message) {
-        string lengthString(message + 1, 4);
-        int nicknameLength = stoi(lengthString);
+        int nicknameLength = stoi(string(message + 1, 4));
         string nickname(message + 5, nicknameLength);
         char ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &client_addr.sin_addr, ip, sizeof(ip));
@@ -91,49 +72,52 @@ private:
         cout << nickname << " logged in from " << ip << ":" << clientPort << endl;
     }
 
+    string fixNumber(int number, int fixTo) {
+        string numStr = to_string(number);
+        if (numStr.size() < fixTo) {
+            numStr.insert(0, fixTo - numStr.size(), '0');  // Relleno con ceros a la izquierda
+        }
+        return numStr;
+    }
+
     void listClients() {
         string clientList;
         for (const auto& client : clientsByName) {
-            clientList += client.first + " from " + client.second.first + ":" + to_string(client.second.second) + "\n";
+            clientList += client.first + " ";
         }
-        if (clientList.empty()) {
-            clientList = "No clients connected.";
+
+        int clientPort = getPortByNickname(clientsByPort[ntohs(client_addr.sin_port)]);
+        if (clientPort != -1) {
+            string message = "L" + fixNumber(clientList.size(), 5) + clientList;
+            sendMessageToClient(applyPadding(message), clientsByPort[clientPort]);
+        } else {
+            cout << "Client port not found for listing clients." << endl;
         }
-        cout << "Connected clients:\n" << clientList << endl;
     }
 
     string applyPadding(const string& message) {
         string paddedMessage = message;
         int paddingLength = 1000 - (message.size() + 3);
-        if (paddingLength < 0) paddingLength = 0;
-        paddedMessage.append(paddingLength, '#');
-        paddedMessage += to_string(paddingLength);
+        paddedMessage.append(max(0, paddingLength), '#');
+        paddedMessage += fixNumber(paddingLength, 3);
         return paddedMessage;
     }
 
     void sendMessageToClients(const string& message) {
         string paddedMessage = applyPadding(message);
         for (const auto& client : clientsByName) {
-            string nickname = client.first;
-            string ip = client.second.first;
-            int port = client.second.second;
-            struct sockaddr_in dest_addr;
-            dest_addr.sin_family = AF_INET;
-            dest_addr.sin_port = htons(port);
-            inet_pton(AF_INET, ip.c_str(), &dest_addr.sin_addr);
-            sendto(sock, paddedMessage.c_str(), paddedMessage.size(), 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+            sendMessageToClient(paddedMessage, client.first);
         }
     }
 
     void sendMessageToClient(const string& message, const string& clientNickname) {
-        string paddedMessage = applyPadding(message);
         if (clientsByName.find(clientNickname) != clientsByName.end()) {
             auto [ip, port] = clientsByName[clientNickname];
             struct sockaddr_in destinatary_addr;
             destinatary_addr.sin_family = AF_INET;
             destinatary_addr.sin_port = htons(port);
             inet_pton(AF_INET, ip.c_str(), &destinatary_addr.sin_addr);
-            sendto(sock, paddedMessage.c_str(), paddedMessage.size(), 0, (struct sockaddr*)&destinatary_addr, sizeof(destinatary_addr));
+            sendto(sock, message.c_str(), message.size(), 0, (struct sockaddr*)&destinatary_addr, sizeof(destinatary_addr));
             cout << "Message sent to " << clientNickname << endl;
         } else {
             cout << "Client not found: " << clientNickname << endl;
@@ -141,9 +125,6 @@ private:
     }
 
     void handleMessage(const string& message) {
-        if (message.size() < 14) {
-            return;
-        }
         int nicknameLength = stoi(message.substr(1, 4));
         string senderNickname = message.substr(5, nicknameLength);
         int contentLengthIndex = 5 + nicknameLength;
@@ -151,26 +132,20 @@ private:
         string content = message.substr(contentLengthIndex + 4, contentLength);
         cout << "Message from " << senderNickname << ": " << content << endl;
 
-        // Send the response only to the sender
-        string response = "M" + string(4 - to_string(senderNickname.size()).size(), '0') + to_string(senderNickname.size()) + senderNickname +
-                          string(4 - to_string(content.size()).size(), '0') + to_string(content.size()) + content;
+        string response = "M" + fixNumber(senderNickname.size(), 4) + senderNickname +
+                          fixNumber(content.size(), 4) + content;
+
+        response = applyPadding(response);
         sendMessageToClient(response, senderNickname);
     }
 
     void handleBroadcast(const string& message) {
         int contentLength = stoi(message.substr(1, 4));
         string content = message.substr(5, contentLength);
-        string senderNickname;
-        int clientPort = ntohs(client_addr.sin_port);
-        if (clientsByPort.find(clientPort) != clientsByPort.end()) {
-            senderNickname = clientsByPort[clientPort];
-        } else {
-            cout << "Sender not found in clientsByPort." << endl;
-            return;
-        }
-        string response = "B" + string(4 - to_string(senderNickname.size()).size(), '0') + to_string(senderNickname.size()) +
-                        senderNickname +
-                        string(4 - to_string(content.size()).size(), '0') + to_string(content.size()) + content;
+        string senderNickname = clientsByPort[ntohs(client_addr.sin_port)];
+
+        string response = "B" + fixNumber(senderNickname.size(), 4) + senderNickname +
+                          fixNumber(content.size(), 4) + content;
         sendMessageToClients(response);
     }
 
@@ -178,28 +153,26 @@ private:
         cout << "File transfer request received." << endl;
     }
 
+    int getPortByNickname(const string& nickname) {
+        if (clientsByName.find(nickname) != clientsByName.end()) {
+            return clientsByName[nickname].second;
+        }
+        return -1; // Retorna -1 si el nickname no se encuentra
+    }
+
     void handleGameRequest(const char* message) {
         int destinataryLength = stoi(string(message + 1, 4));
         string destinatary(message + 5, destinataryLength);
-        string senderNickname;
         int clientPort = ntohs(client_addr.sin_port);
-        if (clientsByPort.find(clientPort) != clientsByPort.end()) {
-            senderNickname = clientsByPort[clientPort];
-        } else {
-            cout << "Sender not found in clientsByPort." << endl;
-            return;
-        }
-        string response = "I" + string(4 - to_string(senderNickname.size()).size(), '0') + to_string(senderNickname.size()) +
-                        senderNickname;
+        string senderNickname = clientsByPort[clientPort];
+
+        // Guardar el puerto del jugador 1 usando getPortByNickname
+        player1 = getPortByNickname(senderNickname);
+
+        string response = "I" + fixNumber(senderNickname.size(), 4) + senderNickname;
+
         if (clientsByName.find(destinatary) != clientsByName.end()) {
-            auto [ip, port] = clientsByName[destinatary];
-            response = applyPadding(response);
-            struct sockaddr_in destinatary_addr;
-            memset(&destinatary_addr, 0, sizeof(destinatary_addr));
-            destinatary_addr.sin_family = AF_INET;
-            destinatary_addr.sin_port = htons(port);
-            inet_pton(AF_INET, ip.c_str(), &destinatary_addr.sin_addr);
-            sendto(sock, response.c_str(), response.size(), 0, (struct sockaddr*)&destinatary_addr, sizeof(destinatary_addr));
+            sendMessageToClient(applyPadding(response), destinatary);
             cout << "Game request sent to " << destinatary << " from " << senderNickname << endl;
         } else {
             cout << "Recipient not found: " << destinatary << endl;
@@ -207,34 +180,37 @@ private:
     }
 
     void handlePlayTurn(const char* message) {
-        string position(message + 1, strlen(message) - 1);
-        cout << "Turn played at position: " << position << endl;
+        // La posición recibida en el mensaje es un string; convertir a índice entero
+        int position = stoi(string(message + 1, strlen(message) - 1)) - 1;
+
+        // Validar la posición (debe estar entre 0 y 8 y ser un espacio vacío en gameState)
+        if (position < 0 || position > 8 || gameState[position] != '-') {
+            cout << "Invalid move at position: " << position + 1 << endl;
+            return;
+        }
+
+        
+        gameState[position] = isPlayerXTurn ? 'X' : 'O';
+        isPlayerXTurn = !isPlayerXTurn; // Cambiar turno al otro jugador
+
+        cout << "Turn played at position: " << position + 1 << endl;
+        cout << "Current game state: " << gameState << endl;
+
+        // Notificar a ambos jugadores sobre el estado actual del juego
+        string updateMessage = "G" + gameState;
+        sendMessageToClient(applyPadding(updateMessage), clientsByPort[player1]);
+        sendMessageToClient(applyPadding(updateMessage), clientsByPort[player2]);
     }
 
     void handleResponseToRequest(const string& message) {
-    if (message.size() < 3) return;
-
-    char responseType = message[1]; // 'y' o 'n'
-
-    if (responseType == 'y') {
-        cout << "Jugador 2 aceptado." << endl;
-
-        int clientPort = ntohs(client_addr.sin_port);
-        string player1Nickname = clientsByPort[clientPort];
-
-        if (!player1Nickname.empty()) {
-            auto it = clientsByName.find(player1Nickname);
-            if (it != clientsByName.end()) {
-                string player2Ip = it->second.first; // Almacenar la IP como cadena
-                cout << "Jugador 2 asociado con IP: " << player2Ip << endl; // Imprimir la IP correctamente
-                player2 = clientPort; // Asocia el puerto del jugador 2
-            }
+        char responseType = message[1];
+        if (responseType == 'y') {
+            cout << "Player 2 accepted." << endl;
+            player2 = ntohs(client_addr.sin_port);
+        } else if (responseType == 'n') {
+            cout << "Player 2 rejected." << endl;
         }
-    } else if (responseType == 'n') {
-        cout << "Jugador 2 rechazado." << endl;
     }
-}
-
 
     void handleLogout(const char* message) {
         string nickname(message + 1, strlen(message) - 1);

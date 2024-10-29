@@ -40,15 +40,112 @@ public:
         sendto(sock, paddedMessage.c_str(), paddedMessage.size(), 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
     }
 
-    // Método para recibir mensajes
+    // Método para recibir mensajes y guardarlos en un string
     void receiveMessages() {
         char buffer[1005];
         socklen_t addr_len = sizeof(server_addr);
         while (true) {
             memset(buffer, 0, sizeof(buffer));
             recvfrom(sock, buffer, sizeof(buffer) - 1, 0, (struct sockaddr*)&server_addr, &addr_len);
-            cout << "Received: " << buffer << endl;
+            
+            // Convertir el mensaje recibido a string
+            string receivedMessage(buffer);
+
+            // Guardar o procesar el mensaje
+            //cout << "Received message as string: " << receivedMessage << endl;
+            processReceivedMessage(receivedMessage);
+            
         }
+    }
+
+    void processReceivedMessage(const string& message) {
+        switch (message[0]) {
+            case 'M':  // Mensaje directo
+                handleMessage(message);
+                break;
+            case 'L':  // Lista de clientes
+                handleListClients(message);
+                break;
+            case 'B':  // Mensaje de difusión (broadcast)
+                handleBroadcast(message);
+                break;
+            case 'I':  // Invitación a juego
+                handleGameInvitation(message);
+                break;
+            case 'T':  // Turno de juego
+                handlePlayTurn(message);
+                break;
+            case 'O':  // Logout de un usuario
+                handleLogout(message);
+                break;
+            case 'G':  // Logout de un usuario
+                handleGamestate(message);
+                break;
+            default:
+                cout << "Mensaje no reconocido: " << message << endl;
+                break;
+        }
+    }
+
+    void handleGamestate(const string& message) {
+        // Extraer el estado del juego, que son los caracteres de posición
+        string gameState = message.substr(1, 9); // Obtener los 9 caracteres del estado
+
+        // Imprimir el tablero 3x3
+        cout << "Tablero de juego:" << endl;
+        for (int i = 0; i < 3; ++i) {
+            cout << " " << gameState[i * 3] << " | " << gameState[i * 3 + 1] << " | " << gameState[i * 3 + 2] << endl;
+            if (i < 2) {
+                cout << "---|---|---" << endl; // Separador entre filas
+            }
+        }
+    }
+
+
+    void handleMessage(const string& message) {
+        // Lee la longitud del nombre del remitente
+        int nameLength = stoi(message.substr(1, 4));
+        
+        // Extrae el nombre del remitente
+        string remitent = message.substr(5, nameLength);
+        
+        // Lee la longitud del mensaje
+        int messageLength = stoi(message.substr(5 + nameLength, 5));
+        
+        // Extrae el mensaje
+        string msg = message.substr(9 + nameLength, messageLength);
+
+        // Imprime el remitente y el mensaje
+        cout << remitent << " envía: " << msg << endl;
+        
+        // Placeholder para procesar mensaje directo
+        // Aquí puedes agregar la lógica para manejar el mensaje según sea necesario
+    }
+
+
+    void handleListClients(const string& message) {
+        cout << "Lista de clientes recibida: " << message << endl;
+        // Placeholder para procesar la lista de clientes
+    }
+
+    void handleBroadcast(const string& message) {
+        cout << "Mensaje de difusión recibido: " << message << endl;
+        // Placeholder para procesar mensaje de broadcast
+    }
+
+    void handleGameInvitation(const string& message) {
+        cout << "Invitación a juego recibida: " << message << endl;
+        // Placeholder para procesar invitación de juego
+    }
+
+    void handlePlayTurn(const string& message) {
+        cout << "Turno de juego recibido: " << message << endl;
+        // Placeholder para procesar turno de juego
+    }
+
+    void handleLogout(const string& message) {
+        cout << "Logout recibido: " << message << endl;
+        // Placeholder para procesar logout
     }
     
     void processInput() {
