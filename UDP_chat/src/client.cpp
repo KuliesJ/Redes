@@ -81,10 +81,17 @@ public:
             case 'G':  // Logout de un usuario
                 handleGamestate(message);
                 break;
+            case 'W':  // Logout de un usuario
+                handleWin(message);
+                break;
             default:
                 cout << "Mensaje no reconocido: " << message << endl;
                 break;
         }
+    }
+
+    void handleWin(const string& message) {
+        cout << "Player with " << message[1] << " wins\n";
     }
 
     void handleGamestate(const string& message) {
@@ -124,17 +131,17 @@ public:
 
 
     void handleListClients(const string& message) {
-        cout << "Lista de clientes recibida: " << message << endl;
+        cout << "Lista de clientes recibida: " << endl;
         // Placeholder para procesar la lista de clientes
     }
 
     void handleBroadcast(const string& message) {
-        cout << "Mensaje de difusión recibido: " << message << endl;
+        cout << "Mensaje de difusión recibido: " << endl;
         // Placeholder para procesar mensaje de broadcast
     }
 
     void handleGameInvitation(const string& message) {
-        cout << "Invitación a juego recibida: " << message << endl;
+        cout << "Invitación a juego recibida: " << endl;
         // Placeholder para procesar invitación de juego
     }
 

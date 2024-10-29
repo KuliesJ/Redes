@@ -189,17 +189,59 @@ private:
             return;
         }
 
-        
+        // Actualizar el estado del juego
         gameState[position] = isPlayerXTurn ? 'X' : 'O';
-        isPlayerXTurn = !isPlayerXTurn; // Cambiar turno al otro jugador
-
         cout << "Turn played at position: " << position + 1 << endl;
         cout << "Current game state: " << gameState << endl;
+
+        // Verificar si hay un ganador
+        char winner = checkWinner();
+        if (winner != '-') {
+            // Anunciar al ganador y enviar mensaje a ambos jugadores
+            string winMessage = "W" + string(1, winner); // Mensaje de victoria
+            sendMessageToClient(applyPadding(winMessage), clientsByPort[player1]);
+            cout << "Message sent to player1 about winner." << endl;
+            sendMessageToClient(applyPadding(winMessage), clientsByPort[player2]);
+            cout << "Message sent to player2 about winner." << endl;
+            cout << "Player " << winner << " has won the game!" << endl;
+            return; // Terminar la función si hay un ganador
+        }
+
+        // Cambiar turno al otro jugador
+        isPlayerXTurn = !isPlayerXTurn;
 
         // Notificar a ambos jugadores sobre el estado actual del juego
         string updateMessage = "G" + gameState;
         sendMessageToClient(applyPadding(updateMessage), clientsByPort[player1]);
+        cout << "Message sent to player1 about game state." << endl;
         sendMessageToClient(applyPadding(updateMessage), clientsByPort[player2]);
+        cout << "Message sent to player2 about game state." << endl;
+    }
+
+    char checkWinner() {
+        // Comprobaciones horizontales
+        for (int i = 0; i < 3; i++) {
+            if (gameState[i * 3] != '-' && gameState[i * 3] == gameState[i * 3 + 1] && gameState[i * 3] == gameState[i * 3 + 2]) {
+                return gameState[i * 3]; // Retorna 'X' o 'O'
+            }
+        }
+
+        // Comprobaciones verticales
+        for (int i = 0; i < 3; i++) {
+            if (gameState[i] != '-' && gameState[i] == gameState[i + 3] && gameState[i] == gameState[i + 6]) {
+                return gameState[i]; // Retorna 'X' o 'O'
+            }
+        }
+
+        // Comprobaciones diagonales
+        if (gameState[0] != '-' && gameState[0] == gameState[4] && gameState[0] == gameState[8]) {
+            return gameState[0]; // Retorna 'X' o 'O'
+        }
+        if (gameState[2] != '-' && gameState[2] == gameState[4] && gameState[2] == gameState[6]) {
+            return gameState[2]; // Retorna 'X' o 'O'
+        }
+
+        return '-'; // Sin ganador
     }
 
     void handleResponseToRequest(const string& message) {
